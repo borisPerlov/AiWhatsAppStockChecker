@@ -71,13 +71,26 @@ app.post('/whatsAppIncomingMessage', async (req, res) => {
 app.post('/createAssistant', async (req, res) => {
   // Use the OpenAI API to create a new assistant
   const assistant = await openai.beta.assistants.create({
-    name: 'Melody Maker', // Name of the assistant
+    name: 'Stock Availability Assistant', // Name of the assistant
     description:
-      'A versatile lyricist for all music genres, inspiring creativity', // Description of the assistant
+      'This intelligent assistant is dedicated to helping you effortlessly track the availability of products, ensuring you stay informed about stock levels in a timely manner', // Description of the assistant
     model: 'gpt-4-1106-preview', // The model used by the assistant
     instructions:
-      'Melody Maker is a creative assistant specialized in songwriting...', // Detailed instructions for the assistant
-    tools: [] // Additional tools for the assistant (if any)
+      'You Stock Availability Assistant. I need your help in checking the availability of a specific product. The product Im looking for is [Product Name/Description], and Im interested in knowing its stock availability.You have the function that check the stock .', // Detailed instructions for the assistant
+    tools: [{
+      "type": "function",
+      "function": {
+          "name": "checkStock",
+          "description": "check stock for product",
+          "parameters": {
+              "type": "object",
+              "properties": {
+                  "query": { "type": "string", "description": "desription of product" },
+              },
+              "required": ["query"]
+          }
+      }
+  }] // Additional tools for the assistant (if any)
   })
 
   res.send(assistant) // Send the created assistant object as a response
@@ -87,7 +100,7 @@ app.post('/createAssistant', async (req, res) => {
 app.post('/runAssistant', async (req, res) => {
   let body = req.body // Get the request body
 
-  let oResp = runAssistant(body.sThread, body.sMessage, body.sAssistant)
+  let oResp = await runAssistant(body.sThread, body.sMessage, body.sAssistant)
   // Send the thread messages and thread ID as a response
   res.send(oResp)
 })
@@ -113,6 +126,21 @@ async function runAssistant (sThread, sMessage, sAssistant) {
   // Wait for the run to complete
   await waitForRunComplete(sThread, run.id)
 
+    //get run object
+    run = await openai.beta.threads.runs.retrieve(
+      sThread,
+      run.id
+  );
+
+  if (run.status === "requires_action") {
+
+
+    await submitToolOutput(sThread, run.id, run.required_action.submit_tool_outputs.tool_calls);
+
+    await waitForRunComplete(sThread, run.id)
+
+}
+
   // Retrieve messages from the thread
   const threadMessages = await openai.beta.threads.messages.list(sThread)
 
@@ -120,6 +148,30 @@ async function runAssistant (sThread, sMessage, sAssistant) {
     threadMessages: threadMessages,
     sThread: sThread
   }
+}
+
+async function submitToolOutput(sThreadId, sRunId, aToolToCall) {
+
+  let aToolOutput = [];
+  for (let i = 0; i < aToolToCall.length; i++) {
+      if (aToolToCall[i].function.name === "checkStock") {
+
+          aToolOutput.push({
+              "tool_call_id": aToolToCall[i].id,
+              "output": "product iphone 6 in stock"
+          })
+      }
+  }
+
+
+  await openai.beta.threads.runs.submitToolOutputs(
+      sThreadId,
+      sRunId,
+      {
+          tool_outputs: aToolOutput
+      }
+  );
+
 }
 
 // Define a function to wait for a run to complete
