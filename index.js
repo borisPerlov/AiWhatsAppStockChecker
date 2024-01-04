@@ -19,7 +19,6 @@ app.use(
 )
 
 
-
 // Import the OpenAI library
 const OpenAI = require('openai')
 // Create an OpenAI client with the API key from the .env file
