@@ -1,11 +1,15 @@
 // Import necessary libraries
+const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library');
 const express = require('express') // Express framework for building web applications
 const app = express() // Initialize an Express application
 const port = 3000 // Define the port number on which the server will listen
 const MessagingResponse = require('twilio').twiml.MessagingResponse; // // Import the MessagingResponse module from the 'twilio' package
 const cookieParser = require('cookie-parser') // Import and use the cookie-parser middleware
-app.use(cookieParser());
+const { Pinecone } = require('@pinecone-database/pinecone')
 
+
+app.use(cookieParser());
 // Load environment variables from the .env file
 require('dotenv').config()
 
@@ -28,7 +32,7 @@ const openai = new OpenAI({
 
 // Define a route for handling incoming WhatsApp messages
 app.post('/whatsAppIncomingMessage', async (req, res) => {
-  
+
   // Create a new instance of MessagingResponse to handle Twilio messages
   const twiml = new MessagingResponse()
 
@@ -59,7 +63,7 @@ app.post('/whatsAppIncomingMessage', async (req, res) => {
 
   // Update the cookie with the latest threadId
   res.cookie('sThread', oAssistantResponce.sThread, ['Path=/']);
-  
+
   // Set the response headers and send the TwiML response
   res.writeHead(200, { 'Content-Type': 'text/xml' });
   res.status(200).end(twiml.toString());
@@ -79,17 +83,17 @@ app.post('/createAssistant', async (req, res) => {
     tools: [{
       "type": "function",
       "function": {
-          "name": "checkStock",
-          "description": "check stock for product",
-          "parameters": {
-              "type": "object",
-              "properties": {
-                  "query": { "type": "string", "description": "desription of product" },
-              },
-              "required": ["query"]
-          }
+        "name": "checkStock",
+        "description": "check stock for product",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "desription of product" },
+          },
+          "required": ["query"]
+        }
       }
-  }] // Additional tools for the assistant (if any)
+    }] // Additional tools for the assistant (if any)
   })
 
   res.send(assistant) // Send the created assistant object as a response
@@ -104,7 +108,9 @@ app.post('/runAssistant', async (req, res) => {
   res.send(oResp)
 })
 
-async function runAssistant (sThread, sMessage, sAssistant) {
+
+
+async function runAssistant(sThread, sMessage, sAssistant) {
   // Check if it's a new conversation or an existing thread
   if (!sThread) {
     let oThread = await openai.beta.threads.create()
@@ -125,10 +131,10 @@ async function runAssistant (sThread, sMessage, sAssistant) {
   // Wait for the run to complete
   await waitForRunComplete(sThread, run.id)
 
-    //get run object
-    run = await openai.beta.threads.runs.retrieve(
-      sThread,
-      run.id
+  //get run object
+  run = await openai.beta.threads.runs.retrieve(
+    sThread,
+    run.id
   );
 
   if (run.status === "requires_action") {
@@ -138,7 +144,7 @@ async function runAssistant (sThread, sMessage, sAssistant) {
 
     await waitForRunComplete(sThread, run.id)
 
-}
+  }
 
   // Retrieve messages from the thread
   const threadMessages = await openai.beta.threads.messages.list(sThread)
@@ -153,28 +159,67 @@ async function submitToolOutput(sThreadId, sRunId, aToolToCall) {
 
   let aToolOutput = [];
   for (let i = 0; i < aToolToCall.length; i++) {
-      if (aToolToCall[i].function.name === "checkStock") {
+    if (aToolToCall[i].function.name === "checkStock") {
 
-          aToolOutput.push({
-              "tool_call_id": aToolToCall[i].id,
-              "output": "product iphone 6 in stock"
-          })
+      let args = JSON.parse(aToolToCall[i].function.arguments);
+      let sMaterialDescription = args.query;
+
+      //create query embedding
+      const embedding = await openai.embeddings.create({
+        model: "text-embedding-ada-002",
+        input: sMaterialDescription,
+        encoding_format: "float",
+      });
+
+      //find the material number in embedding vector storage
+      const pc = new Pinecone({
+        apiKey: process.env['PINECONE_API_KEY']
+      });
+      const index = pc.index(process.env['PINECONE_INDEX']);
+
+      const queryResponse = await index.query({
+        vector: embedding.data[0].embedding,
+        topK: 3,
+        includeValues: false,
+        includeMetadata: true,
+      });
+
+      //get data from google sheets
+      let oGoogleSpreeSheet = await initGoogleSpreadsheet("1YMxMNGldF5dnV0PovDXQHOc5wm1q5tVyeiByeq3Av_s");
+      await oGoogleSpreeSheet.loadInfo(); // loads document properties and worksheets
+      const sheet = oGoogleSpreeSheet.sheetsByTitle["stock"]; // or use doc.sheetsById[id] or doc.sheetsByTitle[title]
+      const aRowsRow = await sheet.getRows();
+
+      //check if material exist 
+      let sOutput = "";
+      for (var k = 0; k < queryResponse.matches.length; k++) {
+        for (var j = 0; j < aRowsRow.length; j++) {
+          if (queryResponse.matches[k].metadata.material === aRowsRow[j]._rawData[0]) {
+            sOutput = sOutput + "there is" + " " + + aRowsRow[j]._rawData[3] + " pieces of product" + aRowsRow[j]._rawData[2] + " " + "in stock"
+          }
+        }
       }
+
+      aToolOutput.push({
+        "tool_call_id": aToolToCall[i].id,
+        "output": sOutput
+      })
+    }
   }
 
 
   await openai.beta.threads.runs.submitToolOutputs(
-      sThreadId,
-      sRunId,
-      {
-          tool_outputs: aToolOutput
-      }
+    sThreadId,
+    sRunId,
+    {
+      tool_outputs: aToolOutput
+    }
   );
 
 }
 
 // Define a function to wait for a run to complete
-async function waitForRunComplete (sThreadId, sRunId) {
+async function waitForRunComplete(sThreadId, sRunId) {
   while (true) {
     const oRun = await openai.beta.threads.runs.retrieve(sThreadId, sRunId)
     if (
@@ -188,6 +233,74 @@ async function waitForRunComplete (sThreadId, sRunId) {
     // Delay the next check to avoid high frequency polling
     await new Promise(resolve => setTimeout(resolve, 1000)) // 1-second delay
   }
+}
+
+
+// create embedding
+app.post('/createMaterialListEmbedding', async (req, res) => {
+
+  //get list of material from google sheets
+
+  let oGoogleSpreeSheet = await initGoogleSpreadsheet("1YMxMNGldF5dnV0PovDXQHOc5wm1q5tVyeiByeq3Av_s");
+  await oGoogleSpreeSheet.loadInfo(); // loads document properties and worksheets
+  const sheet = oGoogleSpreeSheet.sheetsByTitle["material_list"]; // or use doc.sheetsById[id] or doc.sheetsByTitle[title]
+  const aRowsRow = await sheet.getRows();
+
+  const aRowsData = aRowsRow.map(row => {
+    return {
+      "material": row._rawData[0],
+      "category": row._rawData[1],
+      "description": row._rawData[2],
+      "string": "the material number is " + row._rawData[0] + " and description is " + row._rawData[2],
+    }
+  });
+  //perform embedding with open ai 
+
+  let aEmbeddings = [];
+
+
+  for (var i = 0; i < aRowsData.length; i++) {
+    const embedding = await openai.embeddings.create({
+      model: "text-embedding-ada-002",
+      input: aRowsData[i].description,
+      encoding_format: "float",
+    });
+
+    aEmbeddings.push({
+      id: String(i),
+      values: embedding.data[0].embedding,
+      metadata: { "material": aRowsData[i].material }
+    })
+
+  }
+  //save data in vector database
+  const pc = new Pinecone({
+    apiKey: process.env['PINECONE_API_KEY']
+  });
+  const index = pc.index(process.env['PINECONE_INDEX']);
+
+  let oRest = await index.upsert(aEmbeddings);
+
+
+
+  res.send(oRest)
+})
+
+
+async function initGoogleSpreadsheet(sGoogleSpreadsheet) {
+
+  const serviceAccountAuth = new JWT({
+    // env var values here are copied from service account credentials generated by google
+    // see "Authentication" section in docs for more info
+    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    scopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+    ],
+  });
+  const doc = new GoogleSpreadsheet(sGoogleSpreadsheet, serviceAccountAuth);
+
+  return doc;
 }
 
 // Start the server and listen on the specified port
