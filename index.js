@@ -156,15 +156,18 @@ async function runAssistant(sThread, sMessage, sAssistant) {
 }
 
 async function submitToolOutput(sThreadId, sRunId, aToolToCall) {
+  console.log("submitToolOutput" + " " + "sRunId" + " " + sRunId + " " + "sThreadId" + " " + sThreadId)
 
   let aToolOutput = [];
   for (let i = 0; i < aToolToCall.length; i++) {
     if (aToolToCall[i].function.name === "checkStock") {
+      console.log("checkStock")
 
       let args = JSON.parse(aToolToCall[i].function.arguments);
       let sMaterialDescription = args.query;
 
       //create query embedding
+      console.log("create query embedding")
       const embedding = await openai.embeddings.create({
         model: "text-embedding-ada-002",
         input: sMaterialDescription,
@@ -172,6 +175,7 @@ async function submitToolOutput(sThreadId, sRunId, aToolToCall) {
       });
 
       //find the material number in embedding vector storage
+      console.log("find the material number in embedding vector storage")
       const pc = new Pinecone({
         apiKey: process.env['PINECONE_API_KEY']
       });
