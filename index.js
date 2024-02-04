@@ -141,14 +141,14 @@ async function runAssistant(sThread, sMessage, sAssistant) {
 
 
     await submitToolOutput(sThread, run.id, run.required_action.submit_tool_outputs.tool_calls);
-
+    console.log("submitToolOutput ended")
     await waitForRunComplete(sThread, run.id)
-
+    console.log("waitForRunComplete ended")
   }
 
   // Retrieve messages from the thread
   const threadMessages = await openai.beta.threads.messages.list(sThread)
-
+  console.log("threadMessages ")
   return {
     threadMessages: threadMessages,
     sThread: sThread
@@ -188,7 +188,7 @@ async function submitToolOutput(sThreadId, sRunId, aToolToCall) {
         includeMetadata: true,
       });
 
-      console.log("queryResponse")
+      console.log(queryResponse)
 
       //get data from google sheets
       let oGoogleSpreeSheet = await initGoogleSpreadsheet("1YMxMNGldF5dnV0PovDXQHOc5wm1q5tVyeiByeq3Av_s");
@@ -206,7 +206,7 @@ async function submitToolOutput(sThreadId, sRunId, aToolToCall) {
         }
       }
 
-      console.log("sOutput")
+      console.log(sOutput)
 
       aToolOutput.push({
         "tool_call_id": aToolToCall[i].id,
@@ -215,7 +215,7 @@ async function submitToolOutput(sThreadId, sRunId, aToolToCall) {
     }
   }
 
-
+  console.log(aToolOutput)
   await openai.beta.threads.runs.submitToolOutputs(
     sThreadId,
     sRunId,
