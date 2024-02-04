@@ -188,6 +188,8 @@ async function submitToolOutput(sThreadId, sRunId, aToolToCall) {
         includeMetadata: true,
       });
 
+      console.log("queryResponse")
+
       //get data from google sheets
       let oGoogleSpreeSheet = await initGoogleSpreadsheet("1YMxMNGldF5dnV0PovDXQHOc5wm1q5tVyeiByeq3Av_s");
       await oGoogleSpreeSheet.loadInfo(); // loads document properties and worksheets
@@ -203,6 +205,8 @@ async function submitToolOutput(sThreadId, sRunId, aToolToCall) {
           }
         }
       }
+
+      console.log("sOutput")
 
       aToolOutput.push({
         "tool_call_id": aToolToCall[i].id,
