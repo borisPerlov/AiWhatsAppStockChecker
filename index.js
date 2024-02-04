@@ -57,6 +57,8 @@ app.post('/whatsAppIncomingMessage', async (req, res) => {
 
   )
 
+  console.log("oAssistantResponce" + " " + oAssistantResponce)
+
   // Create a Twilio message with the response from OpenAI Assistant
   const message = twiml.message()
   message.body(oAssistantResponce.threadMessages.data[0].content[0].text.value)
@@ -148,7 +150,7 @@ async function runAssistant(sThread, sMessage, sAssistant) {
 
   // Retrieve messages from the thread
   const threadMessages = await openai.beta.threads.messages.list(sThread)
-  console.log("threadMessages ")
+  console.log(threadMessages)
   return {
     threadMessages: threadMessages,
     sThread: sThread
