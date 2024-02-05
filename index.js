@@ -31,13 +31,13 @@ const openai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY']
 })
 
-async function sendWhatsappMessage( body, to, sThread) {
+async function sendWhatsappMessage(body, to, sThread) {
   const client = axios.create({
-      baseURL: 'https://api.twilio.com/2010-04-01/',
-      auth: {
-          username: accountSid,
-          password: authToken,
-      },
+    baseURL: 'https://api.twilio.com/2010-04-01/',
+    auth: {
+      username: process.env['TWILIO_ACCOUNT_SID'],
+      password: process.env['TWILIO_AUTH_TOKEN'],
+    },
   });
 
   // Add your cookies here
@@ -47,25 +47,25 @@ async function sendWhatsappMessage( body, to, sThread) {
 
   let url = '/Accounts/' + accountSid + '/Messages.json'
   const options = {
-      method: 'post',
-      url: url,
-      headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Cookie': cookies, // Add the cookies to the request headers
-      },
-      data:  new URLSearchParams({
-          From: 'whatsapp:+14155238886',
-          Body: body,
-          To: to,
-      }),
+    method: 'post',
+    url: url,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Cookie': cookies, // Add the cookies to the request headers
+    },
+    data: new URLSearchParams({
+      From: 'whatsapp:+14155238886',
+      Body: body,
+      To: to,
+    }),
   };
 
   try {
-      const response = await client(options);
-      return response.data;
+    const response = await client(options);
+    return response.data;
   } catch (error) {
-      console.error('Error sending WhatsApp message:', error);
-      throw error;
+    console.error('Error sending WhatsApp message:', error);
+    throw error;
   }
 }
 
