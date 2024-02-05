@@ -68,6 +68,8 @@ app.post('/whatsAppIncomingMessage', async (req, res) => {
 
   // Set the response headers and send the TwiML response
   res.writeHead(200, { 'Content-Type': 'text/xml' });
+
+  console.log(twiml.toString());
   res.status(200).end(twiml.toString());
 
 })
