@@ -5,6 +5,7 @@ const express = require('express') // Express framework for building web applica
 const app = express() // Initialize an Express application
 const port = 3000 // Define the port number on which the server will listen
 const MessagingResponse = require('twilio').twiml.MessagingResponse; // // Import the MessagingResponse module from the 'twilio' package
+const axios = require('axios');
 const cookieParser = require('cookie-parser') // Import and use the cookie-parser middleware
 const { Pinecone } = require('@pinecone-database/pinecone')
 
@@ -30,6 +31,45 @@ const openai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY']
 })
 
+async function sendWhatsappMessage( body, to, sThread) {
+  const client = axios.create({
+      baseURL: 'https://api.twilio.com/2010-04-01/',
+      auth: {
+          username: accountSid,
+          password: authToken,
+      },
+  });
+
+  // Add your cookies here
+  const cookies = 'sThread=' + sThread;
+
+  // res.cookie('sThread', oResp.sThread, ['Path=/']);
+
+  let url = '/Accounts/' + accountSid + '/Messages.json'
+  const options = {
+      method: 'post',
+      url: url,
+      headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cookie': cookies, // Add the cookies to the request headers
+      },
+      data:  new URLSearchParams({
+          From: 'whatsapp:+14155238886',
+          Body: body,
+          To: to,
+      }),
+  };
+
+  try {
+      const response = await client(options);
+      return response.data;
+  } catch (error) {
+      console.error('Error sending WhatsApp message:', error);
+      throw error;
+  }
+}
+
+
 // Define a route for handling incoming WhatsApp messages
 app.post('/whatsAppIncomingMessage', async (req, res) => {
 
@@ -39,6 +79,7 @@ app.post('/whatsAppIncomingMessage', async (req, res) => {
   // Extract the incoming message and cookies from the request body
   const body = req.body
   const incomingMessage = body.Body
+  const To = body.From
   const cookies = req.cookies
 
   // Initialize a variable to store the threadId (conversation container)
@@ -59,18 +100,28 @@ app.post('/whatsAppIncomingMessage', async (req, res) => {
 
   console.log("oAssistantResponce" + " " + oAssistantResponce)
 
-  // Create a Twilio message with the response from OpenAI Assistant
-  const message = twiml.message()
-  message.body(oAssistantResponce.threadMessages.data[0].content[0].text.value)
 
-  // Update the cookie with the latest threadId
-  res.cookie('sThread', oAssistantResponce.sThread, ['Path=/']);
+  let oMessageResponce = await sendWhatsappMessage(oAssistantResponce.threadMessages.data[0].content[0].text.value, To, oAssistantResponce.sThread); // the separatly message will send because of timeout
 
-  // Set the response headers and send the TwiML response
-  res.writeHead(200, { 'Content-Type': 'text/xml' });
 
-  console.log(twiml.toString());
-  res.status(200).end(twiml.toString());
+  console.log(oAssistantResponce);
+  // return { "twimlResponce": twiml.toString(), "sThread": oAssistantResponce.sThread };
+
+
+  return { "twimlResponce": twiml.toString(), "sThread": oAssistantResponce.sThread };
+
+  // // Create a Twilio message with the response from OpenAI Assistant
+  // const message = twiml.message()
+  // message.body(oAssistantResponce.threadMessages.data[0].content[0].text.value)
+
+  // // Update the cookie with the latest threadId
+  // res.cookie('sThread', oAssistantResponce.sThread, ['Path=/']);
+
+  // // Set the response headers and send the TwiML response
+  // res.writeHead(200, { 'Content-Type': 'text/xml' });
+
+  // console.log(twiml.toString());
+  // res.status(200).end(twiml.toString());
 
 })
 
@@ -83,7 +134,7 @@ app.post('/createAssistant', async (req, res) => {
       'This intelligent assistant is dedicated to helping you effortlessly track the availability of products, ensuring you stay informed about stock levels in a timely manner', // Description of the assistant
     model: 'gpt-4-1106-preview', // The model used by the assistant
     instructions:
-      'You Stock Availability Assistant. I need your help in checking the availability of a specific product. The product Im looking for is [Product Name/Description], and Im interested in knowing its stock availability.You have the function that check the stock .', // Detailed instructions for the assistant
+      'You Stock Availability Assistant. I need your help in checking the availability of a specific product. The product Im looking for is [Product Name/Description], and Im interested in knowing its stock availability.You have the function that check the stock . Return message in the same language as user message', // Detailed instructions for the assistant
     tools: [{
       "type": "function",
       "function": {
