@@ -45,7 +45,7 @@ async function sendWhatsappMessage(body, to, sThread) {
 
   // res.cookie('sThread', oResp.sThread, ['Path=/']);
 
-  let url = '/Accounts/' + accountSid + '/Messages.json'
+  let url = '/Accounts/' + process.env['TWILIO_ACCOUNT_SID'] + '/Messages.json'
   const options = {
     method: 'post',
     url: url,
